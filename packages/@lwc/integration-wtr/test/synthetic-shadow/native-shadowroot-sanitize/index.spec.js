@@ -85,5 +85,44 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             expect(root.querySelector('iframe')).toBeNull();
             expect(root.querySelector('script')).toBeNull();
         });
+
+        it('sanitizer bridge cannot be replaced by page code', () => {
+            setHooks({ sanitizeHtmlContent: stripDangerous });
+
+            // The bridge is frozen (non-writable, non-configurable), so neither assignment nor
+            // redefinition can swap in a passthrough that would bypass sanitization.
+            expect(() => {
+                globalThis.$sanitizeHtmlContent$ = (value) => value;
+            }).toThrow();
+            expect(() =>
+                Object.defineProperty(globalThis, '$sanitizeHtmlContent$', {
+                    configurable: true,
+                    value: (value) => value,
+                })
+            ).toThrow();
+
+            const root = createNativeRoot();
+            root.innerHTML = PAYLOAD;
+            expect(root.querySelector('iframe')).toBeNull();
+            expect(root.querySelector('script')).toBeNull();
+        });
+
+        it('native innerHTML sink cannot be restored by page code', () => {
+            setHooks({ sanitizeHtmlContent: stripDangerous });
+
+            const root = createNativeRoot();
+            // The patched setter is non-configurable, so page code cannot redefine it back to the
+            // raw native setter to regain an unsanitized sink.
+            expect(() =>
+                Object.defineProperty(Object.getPrototypeOf(root), 'innerHTML', {
+                    configurable: true,
+                    set() {},
+                })
+            ).toThrow();
+
+            root.innerHTML = PAYLOAD;
+            expect(root.querySelector('iframe')).toBeNull();
+            expect(root.querySelector('script')).toBeNull();
+        });
     }
 );

@@ -39,10 +39,13 @@ export function setHooks(hooks: OverridableHooks) {
     sanitizeHtmlContentImpl = hooks.sanitizeHtmlContent;
 
     // Bridge for `@lwc/synthetic-shadow`, which can't import this directly (separate, tree-shaken bundle).
+    // Frozen (non-writable, non-configurable) so sandboxed code can't swap in a passthrough sanitizer;
+    // safe because setHooks runs at boot, before any untrusted code, so the framework always wins the slot.
     if (isUndefined((globalThis as any)[KEY__SANITIZE_HTML_CONTENT])) {
         defineProperty(globalThis, KEY__SANITIZE_HTML_CONTENT, {
             value: sanitizeHtmlContent,
-            configurable: true,
+            writable: false,
+            configurable: false,
         });
     }
 }

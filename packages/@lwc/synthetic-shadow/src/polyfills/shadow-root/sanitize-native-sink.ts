@@ -6,9 +6,9 @@
  */
 import {
     defineProperty,
+    getOwnPropertyDescriptor,
     isFunction,
     isUndefined,
-    KEY__NATIVE_SHADOWROOT_SINKS_PATCHED,
     KEY__SANITIZE_HTML_CONTENT,
 } from '@lwc/shared';
 import {
@@ -24,35 +24,42 @@ function maybeSanitize(value: unknown): unknown {
     return isFunction(sanitize) ? sanitize(value) : value;
 }
 
-// Apply once: a second synthetic-shadow copy would capture this wrapper as "native" and sanitize twice.
-if (isUndefined((globalThis as any)[KEY__NATIVE_SHADOWROOT_SINKS_PATCHED])) {
-    defineProperty(globalThis, KEY__NATIVE_SHADOWROOT_SINKS_PATCHED, {
-        value: true,
-        configurable: true,
+// Idempotency without a forgeable global flag: the wrappers are installed non-configurable, so a
+// prototype whose sink descriptor is already non-configurable has been patched (by us, or a prior
+// synthetic-shadow copy) — re-defining would throw, so skip. This reads the real descriptor rather
+// than a global marker, so sandboxed code can't fake "already patched" to skip protection; the only
+// way to make the descriptor non-configurable is to actually lock it, which is what we want anyway.
+function isLocked(proto: object, name: string): boolean {
+    const descriptor = getOwnPropertyDescriptor(proto, name);
+    return !isUndefined(descriptor) && descriptor.configurable === false;
+}
+
+if (
+    !isUndefined(nativeShadowRootInnerHTMLDescriptor) &&
+    isFunction(nativeShadowRootInnerHTMLDescriptor.set) &&
+    !isLocked(NativeShadowRoot.prototype, 'innerHTML')
+) {
+    const nativeInnerHTMLSetter = nativeShadowRootInnerHTMLDescriptor.set;
+    defineProperty(NativeShadowRoot.prototype, 'innerHTML', {
+        ...nativeShadowRootInnerHTMLDescriptor,
+        configurable: false,
+        set(this: ShadowRoot, value: unknown) {
+            nativeInnerHTMLSetter.call(this, maybeSanitize(value));
+        },
     });
+}
 
-    if (
-        !isUndefined(nativeShadowRootInnerHTMLDescriptor) &&
-        isFunction(nativeShadowRootInnerHTMLDescriptor.set)
-    ) {
-        const nativeInnerHTMLSetter = nativeShadowRootInnerHTMLDescriptor.set;
-        defineProperty(NativeShadowRoot.prototype, 'innerHTML', {
-            ...nativeShadowRootInnerHTMLDescriptor,
-            set(this: ShadowRoot, value: unknown) {
-                nativeInnerHTMLSetter.call(this, maybeSanitize(value));
-            },
-        });
-    }
-
-    if (isFunction(nativeShadowRootSetHTMLUnsafe)) {
-        const nativeSetHTMLUnsafe = nativeShadowRootSetHTMLUnsafe;
-        defineProperty(NativeShadowRoot.prototype, 'setHTMLUnsafe', {
-            writable: true,
-            enumerable: false,
-            configurable: true,
-            value(this: ShadowRoot, html: unknown) {
-                return nativeSetHTMLUnsafe.call(this, maybeSanitize(html));
-            },
-        });
-    }
+if (
+    isFunction(nativeShadowRootSetHTMLUnsafe) &&
+    !isLocked(NativeShadowRoot.prototype, 'setHTMLUnsafe')
+) {
+    const nativeSetHTMLUnsafe = nativeShadowRootSetHTMLUnsafe;
+    defineProperty(NativeShadowRoot.prototype, 'setHTMLUnsafe', {
+        writable: false,
+        enumerable: false,
+        configurable: false,
+        value(this: ShadowRoot, html: unknown) {
+            return nativeSetHTMLUnsafe.call(this, maybeSanitize(html));
+        },
+    });
 }
