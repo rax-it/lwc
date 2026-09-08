@@ -19,7 +19,12 @@ import {
 
 // Read from the global instead of importing `sanitizeHtmlContent`: this bundle's own `@lwc/shared`
 // copy never runs `setHooks`, so a bundler constant-folds the imported hook to a no-op.
+// Checked at call time (not module load) so the kill-switch takes effect even if the flag is set
+// after synthetic shadow loads.
 function maybeSanitize(value: unknown): unknown {
+    if (lwcRuntimeFlags.DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION) {
+        return value;
+    }
     const sanitize = (globalThis as any)[KEY__SANITIZE_HTML_CONTENT];
     return isFunction(sanitize) ? sanitize(value) : value;
 }

@@ -169,6 +169,15 @@ export interface FeatureFlagMap {
      * `rendererFactory` stays freely re-invocable, as it was before this flag. (W-23814927)
      */
     ENABLE_RENDERER_FACTORY_GUARD: FeatureFlagValue;
+
+    /**
+     * Kill-switch for the W-23994661 hardening. If true, native `ShadowRoot` `innerHTML`/`setHTMLUnsafe`
+     * writes bypass the `sanitizeHtmlContent` hook and pass through unchanged, as they did before this
+     * fix. If false or unset (default), those sinks are routed through the hook so a native root (which
+     * synthetic shadow otherwise leaves undistorted) can't be used to write unsanitized HTML. Only enable
+     * this to unblock a regression; the default is the more secure behavior.
+     */
+    DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION: FeatureFlagValue;
 }
 
 export type FeatureFlagName = keyof FeatureFlagMap;

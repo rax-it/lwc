@@ -107,6 +107,22 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             expect(root.querySelector('script')).toBeNull();
         });
 
+        it('kill-switch bypasses the hook so native sinks are not sanitized', () => {
+            const spy = mockFn((content) => stripDangerous(content));
+            setHooks({ sanitizeHtmlContent: spy });
+            lwcRuntimeFlags.DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION = true;
+
+            try {
+                const root = createNativeRoot();
+                root.innerHTML = '<span>ok</span>';
+
+                expect(spy).not.toHaveBeenCalled();
+                expect(root.querySelector('span')).not.toBeNull();
+            } finally {
+                lwcRuntimeFlags.DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION = false;
+            }
+        });
+
         it('native innerHTML sink cannot be restored by page code', () => {
             setHooks({ sanitizeHtmlContent: stripDangerous });
 
