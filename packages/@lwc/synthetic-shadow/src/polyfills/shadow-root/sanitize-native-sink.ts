@@ -17,10 +17,8 @@ import {
     nativeShadowRootSetHTMLUnsafe,
 } from '../../env/shadow-root';
 
-// Read from the global instead of importing `sanitizeHtmlContent`: this bundle's own `@lwc/shared`
-// copy never runs `setHooks`, so a bundler constant-folds the imported hook to a no-op.
-// Checked at call time (not module load) so the kill-switch takes effect even if the flag is set
-// after synthetic shadow loads.
+// Read the hook off the global, not via import: this bundle's `@lwc/shared` never runs setHooks, so
+// the import constant-folds to a no-op. Resolved at call time so the kill-switch flag can flip late.
 function maybeSanitize(value: unknown): unknown {
     if (lwcRuntimeFlags.DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION) {
         return value;
@@ -29,11 +27,9 @@ function maybeSanitize(value: unknown): unknown {
     return isFunction(sanitize) ? sanitize(value) : value;
 }
 
-// Idempotency without a forgeable global flag: the wrappers are installed non-configurable, so a
-// prototype whose sink descriptor is already non-configurable has been patched (by us, or a prior
-// synthetic-shadow copy) — re-defining would throw, so skip. This reads the real descriptor rather
-// than a global marker, so sandboxed code can't fake "already patched" to skip protection; the only
-// way to make the descriptor non-configurable is to actually lock it, which is what we want anyway.
+// Idempotency without a forgeable marker: our wrappers install non-configurable, so a
+// non-configurable sink descriptor means it's already patched. Faking this requires actually locking
+// the sink — which is the protection anyway.
 function isLocked(proto: object, name: string): boolean {
     const descriptor = getOwnPropertyDescriptor(proto, name);
     return !isUndefined(descriptor) && descriptor.configurable === false;
