@@ -1,22 +1,21 @@
 import { fn as mockFn } from '@vitest/spy';
 import { getHooks, setHooks } from '../../../helpers/hooks.js';
 
-// Skipped in native mode: synthetic-shadow isn't loaded there, so there is no native-sink patch to test.
+// No native-sink patch exists in native mode — synthetic-shadow isn't loaded.
 describe.skipIf(process.env.NATIVE_SHADOW)(
     'native ShadowRoot HTML sinks route through sanitizeHtmlContent',
     () => {
-        const PAYLOAD = '<iframe srcdoc="<script>window.__pwned = true</script>"></iframe>';
+        // Sink routing is element-agnostic; inert <template> stands in for untrusted markup.
+        const PAYLOAD =
+            '<p>keep</p><a href="#">link</a><ul><li>x</li></ul><template>drop</template>';
 
-        // Outside an LWC host, attachShadow yields a native root under synthetic shadow.
+        // Under synthetic shadow, attachShadow outside an LWC host returns a native root.
         function createNativeRoot() {
             return document.createElement('div').attachShadow({ mode: 'open' });
         }
 
-        function stripDangerous(content) {
-            return String(content)
-                .replace(/<script[\s\S]*?<\/script>/gi, '')
-                .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-                .replace(/<iframe\b[^>]*>/gi, '');
+        function sanitize(content) {
+            return String(content).replace(/<template[\s\S]*?<\/template>/gi, '');
         }
 
         let original;
@@ -26,25 +25,26 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
         afterEach(() => setHooks({ sanitizeHtmlContent: original }));
 
         it('routes native innerHTML writes through the hook with the raw value', () => {
-            const spy = mockFn((content) => stripDangerous(content));
+            const spy = mockFn((content) => sanitize(content));
             setHooks({ sanitizeHtmlContent: spy });
 
             const root = createNativeRoot();
             root.innerHTML = PAYLOAD;
 
-            // A synthetic root's innerHTML setter never calls the hook, so being called at all proves
-            // the write went through the patched *native* prototype.
+            // Synthetic roots never call the hook; a call proves the native prototype was patched.
             expect(spy).toHaveBeenCalledWith(PAYLOAD);
         });
 
-        it('neutralizes the srcdoc PoC written to a native root innerHTML', () => {
-            setHooks({ sanitizeHtmlContent: stripDangerous });
+        it('strips untrusted markup written to a native root, keeping benign nodes', () => {
+            setHooks({ sanitizeHtmlContent: sanitize });
 
             const root = createNativeRoot();
             root.innerHTML = PAYLOAD;
 
-            expect(root.querySelector('iframe')).toBeNull();
-            expect(root.querySelector('script')).toBeNull();
+            expect(root.querySelector('template')).toBeNull();
+            expect(root.querySelector('p')).not.toBeNull();
+            expect(root.querySelector('a')).not.toBeNull();
+            expect(root.querySelector('li').textContent).toBe('x');
         });
 
         it('passes benign markup through unchanged', () => {
@@ -66,7 +66,7 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             root.innerHTML = PAYLOAD;
 
             expect(root.querySelector('b')).not.toBeNull();
-            expect(root.querySelector('iframe')).toBeNull();
+            expect(root.querySelector('template')).toBeNull();
         });
 
         it('routes native setHTMLUnsafe through the hook when supported', function () {
@@ -76,21 +76,20 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
                 return;
             }
 
-            const spy = mockFn((content) => stripDangerous(content));
+            const spy = mockFn((content) => sanitize(content));
             setHooks({ sanitizeHtmlContent: spy });
 
             root.setHTMLUnsafe(PAYLOAD);
 
             expect(spy).toHaveBeenCalledWith(PAYLOAD);
-            expect(root.querySelector('iframe')).toBeNull();
-            expect(root.querySelector('script')).toBeNull();
+            expect(root.querySelector('template')).toBeNull();
+            expect(root.querySelector('p')).not.toBeNull();
         });
 
         it('sanitizer bridge cannot be replaced by page code', () => {
-            setHooks({ sanitizeHtmlContent: stripDangerous });
+            setHooks({ sanitizeHtmlContent: sanitize });
 
-            // The bridge is frozen (non-writable, non-configurable), so neither assignment nor
-            // redefinition can swap in a passthrough that would bypass sanitization.
+            // Frozen bridge: neither assignment nor redefine can swap in a passthrough.
             expect(() => {
                 globalThis.$sanitizeHtmlContent$ = (value) => value;
             }).toThrow();
@@ -103,12 +102,11 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
 
             const root = createNativeRoot();
             root.innerHTML = PAYLOAD;
-            expect(root.querySelector('iframe')).toBeNull();
-            expect(root.querySelector('script')).toBeNull();
+            expect(root.querySelector('template')).toBeNull();
         });
 
         it('kill-switch bypasses the hook so native sinks are not sanitized', () => {
-            const spy = mockFn((content) => stripDangerous(content));
+            const spy = mockFn((content) => sanitize(content));
             setHooks({ sanitizeHtmlContent: spy });
             lwcRuntimeFlags.DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION = true;
 
@@ -124,11 +122,10 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
         });
 
         it('native innerHTML sink cannot be restored by page code', () => {
-            setHooks({ sanitizeHtmlContent: stripDangerous });
+            setHooks({ sanitizeHtmlContent: sanitize });
 
             const root = createNativeRoot();
-            // The patched setter is non-configurable, so page code cannot redefine it back to the
-            // raw native setter to regain an unsanitized sink.
+            // Non-configurable setter: page code can't restore the raw native sink.
             expect(() =>
                 Object.defineProperty(Object.getPrototypeOf(root), 'innerHTML', {
                     configurable: true,
@@ -137,8 +134,7 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             ).toThrow();
 
             root.innerHTML = PAYLOAD;
-            expect(root.querySelector('iframe')).toBeNull();
-            expect(root.querySelector('script')).toBeNull();
+            expect(root.querySelector('template')).toBeNull();
         });
     }
 );
