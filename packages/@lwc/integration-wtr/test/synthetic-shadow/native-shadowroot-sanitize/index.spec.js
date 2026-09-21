@@ -1,11 +1,11 @@
 import { fn as mockFn } from '@vitest/spy';
 import { getHooks, setHooks } from '../../../helpers/hooks.js';
 
-// No native-sink patch exists in native mode — synthetic-shadow isn't loaded.
+// In native mode synthetic-shadow isn't loaded, so there's no wrapper to exercise.
 describe.skipIf(process.env.NATIVE_SHADOW)(
     'native ShadowRoot HTML sinks route through sanitizeHtmlContent',
     () => {
-        // Sink routing is element-agnostic; inert <template> stands in for untrusted markup.
+        // Routing is element-agnostic; an inert <template> stands in for the markup the hook drops.
         const PAYLOAD =
             '<p>keep</p><a href="#">link</a><ul><li>x</li></ul><template>drop</template>';
 
@@ -31,11 +31,11 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             const root = createNativeRoot();
             root.innerHTML = PAYLOAD;
 
-            // Synthetic roots never call the hook; a call proves the native prototype was patched.
+            // Synthetic roots never call the hook; a call proves the native prototype was wrapped.
             expect(spy).toHaveBeenCalledWith(PAYLOAD);
         });
 
-        it('strips untrusted markup written to a native root, keeping benign nodes', () => {
+        it('removes the markup the hook drops from a native root, keeping the rest', () => {
             setHooks({ sanitizeHtmlContent: sanitize });
 
             const root = createNativeRoot();
@@ -47,7 +47,7 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             expect(root.querySelector('li').textContent).toBe('x');
         });
 
-        it('passes benign markup through unchanged', () => {
+        it('passes markup through unchanged when the hook is a passthrough', () => {
             const spy = mockFn((content) => content);
             setHooks({ sanitizeHtmlContent: spy });
 
@@ -86,10 +86,10 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             expect(root.querySelector('p')).not.toBeNull();
         });
 
-        it('sanitizer bridge cannot be replaced by page code', () => {
+        it('global hook bridge is non-writable and non-configurable', () => {
             setHooks({ sanitizeHtmlContent: sanitize });
 
-            // Frozen bridge: neither assignment nor redefine can swap in a passthrough.
+            // Neither assignment nor redefine succeeds against the frozen bridge.
             expect(() => {
                 globalThis.$sanitizeHtmlContent$ = (value) => value;
             }).toThrow();
@@ -105,7 +105,7 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             expect(root.querySelector('template')).toBeNull();
         });
 
-        it('kill-switch bypasses the hook so native sinks are not sanitized', () => {
+        it('kill-switch flag makes native sink writes bypass the hook', () => {
             const spy = mockFn((content) => sanitize(content));
             setHooks({ sanitizeHtmlContent: spy });
             lwcRuntimeFlags.DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION = true;
@@ -121,11 +121,11 @@ describe.skipIf(process.env.NATIVE_SHADOW)(
             }
         });
 
-        it('native innerHTML sink cannot be restored by page code', () => {
+        it('wrapped native innerHTML accessor is non-configurable', () => {
             setHooks({ sanitizeHtmlContent: sanitize });
 
             const root = createNativeRoot();
-            // Non-configurable setter: page code can't restore the raw native sink.
+            // Non-configurable accessor: redefining it throws.
             expect(() =>
                 Object.defineProperty(Object.getPrototypeOf(root), 'innerHTML', {
                     configurable: true,

@@ -11,10 +11,11 @@ export const NativeShadowRoot = ShadowRoot;
 
 export const isInstanceOfNativeShadowRoot = (node: any) => node instanceof NativeShadowRoot;
 
-// Captured before synthetic shadow patches the prototype, so the wrappers see the real native sinks.
+// Captured before synthetic shadow overrides the prototype, so the wrappers wrap the real native accessors.
 export const nativeShadowRootInnerHTMLDescriptor = getOwnPropertyDescriptor(
     NativeShadowRoot.prototype,
     'innerHTML'
 );
 export const nativeShadowRootSetHTMLUnsafe = (NativeShadowRoot.prototype as any).setHTMLUnsafe as
-    ((html: any, ...rest: unknown[]) => void) | undefined;
+    | ((html: any, ...rest: unknown[]) => void)
+    | undefined;

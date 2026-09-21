@@ -18,7 +18,7 @@ import {
 } from '../../env/shadow-root';
 
 // Read the hook off the global, not via import: this bundle's `@lwc/shared` never runs setHooks, so
-// the import constant-folds to a no-op. Resolved at call time so the kill-switch flag can flip late.
+// an imported reference constant-folds to a no-op. Resolved at call time so the flag can flip late.
 function maybeSanitize(value: unknown): unknown {
     if (lwcRuntimeFlags.DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION) {
         return value;
@@ -27,9 +27,8 @@ function maybeSanitize(value: unknown): unknown {
     return isFunction(sanitize) ? sanitize(value) : value;
 }
 
-// Idempotency without a forgeable marker: our wrappers install non-configurable, so a
-// non-configurable sink descriptor means it's already patched. Faking this requires actually locking
-// the sink — which is the protection anyway.
+// Our wrappers install as non-configurable, so a non-configurable descriptor already means one is
+// in place — use that as the idempotency signal instead of a separate marker property.
 function isLocked(proto: object, name: string): boolean {
     const descriptor = getOwnPropertyDescriptor(proto, name);
     return !isUndefined(descriptor) && descriptor.configurable === false;

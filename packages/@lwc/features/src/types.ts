@@ -171,9 +171,8 @@ export interface FeatureFlagMap {
     ENABLE_RENDERER_FACTORY_GUARD: FeatureFlagValue;
 
     /**
-     * Kill-switch: when true, native `ShadowRoot` `innerHTML`/`setHTMLUnsafe` bypass the
-     * `sanitizeHtmlContent` hook. Default routes them through it so a native root can't write
-     * unsanitized HTML. Enable only to unblock a regression.
+     * Kill-switch: when true, native `ShadowRoot` `innerHTML`/`setHTMLUnsafe` writes bypass the
+     * `sanitizeHtmlContent` hook they are otherwise routed through. Enable only to unblock a regression.
      */
     DISABLE_NATIVE_SHADOWROOT_SINK_SANITIZATION: FeatureFlagValue;
 }
