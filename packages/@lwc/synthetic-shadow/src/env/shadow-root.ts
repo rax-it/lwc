@@ -16,5 +16,4 @@ export const nativeShadowRootInnerHTMLDescriptor = getOwnPropertyDescriptor(
     NativeShadowRoot.prototype,
     'innerHTML'
 );
-export const nativeShadowRootSetHTMLUnsafe = (NativeShadowRoot.prototype as any).setHTMLUnsafe as
-    ((html: any, ...rest: unknown[]) => void) | undefined;
+export const nativeShadowRootSetHTMLUnsafe = NativeShadowRoot.prototype.setHTMLUnsafe;
